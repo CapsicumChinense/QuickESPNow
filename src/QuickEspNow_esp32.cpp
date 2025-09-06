@@ -43,7 +43,7 @@ bool QuickEspNow::begin (uint8_t channel, uint32_t wifi_interface, bool synchron
     }
     setChannel (channel, ch2);
 
-    DEBUG_INFO (QESPNOW_TAG, ARDUHAL_LOG_COLOR (ARDUHAL_LOG_COLOR_RED) "Starting ESP-NOW in in channel %u interface %s", channel, wifi_if == WIFI_IF_STA ? "STA" : "AP");
+    DEBUG_INFO (QESPNOW_TAG, "Starting ESP-NOW in in channel %u interface %s", channel, wifi_if == WIFI_IF_STA ? "STA" : "AP");
 
     this->channel = channel;
     initComms ();
@@ -195,6 +195,12 @@ int32_t QuickEspNow::sendEspNowMessage (comms_tx_queue_item_t* message) {
 
     DEBUG_VERBOSE (QESPNOW_TAG, "ESP-NOW message to " MACSTR, MAC2STR (message->dstAddress));
 
+    if(message->dstAddress[0] == 0xFF && message->dstAddress[1] == 0xFF && message->dstAddress[2] == 0xFF &&
+       message->dstAddress[3] == 0xFF && message->dstAddress[4] == 0xFF && message->dstAddress[5] == 0xFF) {
+        DEBUG_VERBOSE (QESPNOW_TAG, "Broadcast message, deleting broadcast address from peer list!");
+        peer_list.delete_peer (message->dstAddress);
+    } 
+
 
     addPeer (message->dstAddress);
     DEBUG_DBG (QESPNOW_TAG, "Peer added " MACSTR, MAC2STR (message->dstAddress));
@@ -242,11 +248,15 @@ void QuickEspNow::espnowTxHandle () {
 void QuickEspNow::enableTransmit (bool enable) {
     DEBUG_DBG (QESPNOW_TAG, "Send esp-now task %s", enable ? "enabled" : "disabled");
     if (enable) {
-        vTaskResume (espnowTxTask);
-        vTaskResume (espnowRxTask);
+        if (espnowTxTask_cb) {
+            vTaskResume (espnowTxTask);
+            vTaskResume (espnowRxTask);
+        }
     } else {
-        vTaskSuspend (espnowTxTask);
-        vTaskSuspend (espnowRxTask);
+        if (espnowTxTask_cb) {
+            vTaskSuspend (espnowTxTask);
+            vTaskSuspend (espnowRxTask);
+        }
     }
 }
 
@@ -401,7 +411,7 @@ uint8_t PeerListClass::get_peer_number () {
 }
 
 bool PeerListClass::peer_exists (const uint8_t* mac) {
-    for (int i = 0; i < ESP_NOW_MAX_TOTAL_PEER_NUM; i++) {
+    for (uint8_t i = 0; i < ESP_NOW_MAX_TOTAL_PEER_NUM; i++) {
         if (memcmp (peer_list.peer[i].mac, mac, ESP_NOW_ETH_ALEN) == 0) {
             if (peer_list.peer[i].active) {
                 peer_list.peer[i].last_msg = millis ();
@@ -414,7 +424,7 @@ bool PeerListClass::peer_exists (const uint8_t* mac) {
 }
 
 peer_t* PeerListClass::get_peer (const uint8_t* mac) {
-    for (int i = 0; i < ESP_NOW_MAX_TOTAL_PEER_NUM; i++) {
+    for (uint8_t i = 0; i < ESP_NOW_MAX_TOTAL_PEER_NUM; i++) {
         if (memcmp (peer_list.peer[i].mac, mac, ESP_NOW_ETH_ALEN) == 0) {
             if (peer_list.peer[i].active) {
                 DEBUG_VERBOSE (PEERLIST_TAG, "Peer " MACSTR " found", MAC2STR (mac));
@@ -435,7 +445,7 @@ bool PeerListClass::update_peer_use (const uint8_t* mac) {
 }
 
 bool PeerListClass::add_peer (const uint8_t* mac) {
-    if (peer_exists (mac)) {
+    if (int i = peer_exists (mac)) {
         DEBUG_VERBOSE (PEERLIST_TAG, "Peer " MACSTR " already exists", MAC2STR (mac));
         return false;
     }
@@ -448,7 +458,7 @@ bool PeerListClass::add_peer (const uint8_t* mac) {
         // delete_peer (); // Delete should happen in higher level
     }
 
-    for (int i = 0; i < ESP_NOW_MAX_TOTAL_PEER_NUM; i++) {
+    for (uint8_t i = 0; i < ESP_NOW_MAX_TOTAL_PEER_NUM; i++) {
         if (!peer_list.peer[i].active) {
             memcpy (peer_list.peer[i].mac, mac, ESP_NOW_ETH_ALEN);
             peer_list.peer[i].active = true;
