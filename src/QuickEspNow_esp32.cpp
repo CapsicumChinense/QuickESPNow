@@ -197,8 +197,13 @@ int32_t QuickEspNow::sendEspNowMessage (comms_tx_queue_item_t* message) {
 
     if(message->dstAddress[0] == 0xFF && message->dstAddress[1] == 0xFF && message->dstAddress[2] == 0xFF &&
        message->dstAddress[3] == 0xFF && message->dstAddress[4] == 0xFF && message->dstAddress[5] == 0xFF) {
-        DEBUG_VERBOSE (QESPNOW_TAG, "Broadcast message, deleting broadcast address from peer list!");
-        peer_list.delete_peer (message->dstAddress);
+        esp_now_peer_info_t peer;
+        ESP_ERROR_CHECK (esp_now_get_peer(message->dstAddress, &peer));
+
+        if (peer.channel != this->channel) {
+            DEBUG_VERBOSE (QESPNOW_TAG, "Broadcast message, deleting broadcast address from peer list!");
+            peer_list.delete_peer (message->dstAddress);
+        }
     } 
 
 
